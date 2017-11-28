@@ -1,43 +1,38 @@
 /*
- * The MIT License (MIT)
+ * W3C Software License
+ *
  * Copyright (c) 2017 the thingweb community
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- * and associated documentation files (the "Software"), to deal in the Software without restriction,
- * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR
+ * WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF
+ * MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE
+ * SOFTWARE OR DOCUMENT WILL NOT INFRINGE ANY THIRD PARTY PATENTS, COPYRIGHTS,
+ * TRADEMARKS OR OTHER RIGHTS.
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial
- * portions of the Software.
+ * COPYRIGHT HOLDERS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL OR
+ * CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE OR DOCUMENT.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
- * TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * The name and trademarks of copyright holders may NOT be used in advertising or
+ * publicity pertaining to the work without specific, written prior permission. Title
+ * to copyright in this work will at all times remain with copyright holders.
  */
 
-import {ResourceListener} from "node-wot-protocols"
+import {ResourceListener} from "./resource-listeners/protocol-interfaces"
 import {ThingDescription} from "node-wot-td-tools";
+import ConsumedThing from "./consumed-thing";
 import * as TD from "node-wot-td-tools";
 import * as Rest from "./resource-listeners/all-resource-listeners"
 import Servient from "./servient";
 import * as TDGenerator from "./td-generator"
 
-export default class ExposedThing implements WoT.DynamicThing {
+export default class ExposedThing extends ConsumedThing implements WoT.ExposedThing {
     // these arrays and their contents are mutable
     private interactions: Array<TD.Interaction> = [];
     private interactionStates: { [key: string]: InteractionState } = {}; //TODO migrate to Map
     private restListeners: Map<string, ResourceListener> = new Map<string, ResourceListener>();
 
-    private readonly srv: Servient;
-
-    /** name of the Thing */
-    public readonly name: string
-
-    constructor(servient: Servient, name: string) {
-        this.srv = servient;
-        this.name = name;
+    constructor(servient: Servient, td: ThingDescription) { // name: string
+        super(servient, td);
         this.addResourceListener("/" + this.name, new Rest.TDResourceListener(this));
     }
 
@@ -62,8 +57,11 @@ export default class ExposedThing implements WoT.DynamicThing {
     */
     public invokeAction(actionName: string, parameter?: any): Promise<any> {
         return new Promise<any>((resolve, reject) => {
+            console.log("Try to find action for: " + actionName);
             let state = this.interactionStates[actionName];
             if (state) {
+                console.log("Action state : " + state);
+
                 if (state.handlers.length) {
                     let handler = state.handlers[0];
                     resolve(handler(parameter));
@@ -113,53 +111,84 @@ export default class ExposedThing implements WoT.DynamicThing {
         });
     }
 
-    /**
-     * Emit event to all listeners
-     */
-    public emitEvent(event: Event): void { }
+    // define how to expose and run the Thing
 
-    public addListener(eventName: string, listener: (event: Event) => void): ExposedThing {
+    /** @inheritDoc */
+    register(directory?: USVString): Promise<void> {
+        return new Promise<void>((resolve, reject) => {    
+        });
+    }
+
+    /** @inheritDoc */
+    unregister(directory?: USVString): Promise<void> {
+        return new Promise<void>((resolve, reject) => {    
+        });
+    }
+
+    /** @inheritDoc */
+    start(directory?: USVString): Promise<void> {
+        return new Promise<void>((resolve, reject) => {    
+        });
+    }
+
+    /** @inheritDoc */
+    stop(directory?: USVString): Promise<void> {
+        return new Promise<void>((resolve, reject) => {    
+        });
+    }
+
+    /** @inheritDoc */
+    public emitEvent(eventName: string, payload: any): Promise<void> {
+        return new Promise<void>((resolve, reject) => {    
+        });
+    }
+
+    /** @inheritDoc */
+    onRetrieveProperty(handler: WoT.RequestHandler): ExposedThing {
+        // TODO implement onRetrieveProperty
         return this;
     }
 
-    public removeListener(eventName: string, listener: (event: Event) => void): ExposedThing {
-        return this;
-    }
 
-    removeAllListeners(eventName: string): ExposedThing {
-        return this;
-    }
+    // function (request: WoT.Request) {
+    //     request.name;
+    //     return 1;
+    // }
 
-    /**
-     * register a handler for an action
-     * @param actionName Name of the action
-     * @param cb callback to be called when the action gets invoked, optionally is supplied a parameter
-     */
-    onInvokeAction(actionName: string, cb: (param?: any) => any): ExposedThing {
-        let state = this.interactionStates[actionName];
+    /** @inheritDoc */
+    // (request: WoT.Request) => any
+    // handler: WoT.RequestHandler
+    onInvokeAction(handler: WoT.RequestHandler): ExposedThing {
+        let state = this.interactionStates[handler.request.name]; // actionName
         if (state) {
             if (state.handlers.length > 0) state.handlers.splice(0);
-            state.handlers.push(cb);
-        }
-
-        return this;
-    }
-
-    /**
-     * register a handler for value updates on the property
-     * @param propertyName Name of the property
-     * @param cb callback to be called when value changes; signature (newValue,oldValue)
-     */
-    onUpdateProperty(propertyName: string, cb: (newValue: any, oldValue?: any) => void): ExposedThing {
-        let state = this.interactionStates[propertyName];
-        if (state) {
-            state.handlers.push(cb);
+            state.handlers.push(handler.callback); // cb
         } else {
-            console.error("no such property " + propertyName + " on " + this.name);
+            console.error("no such action " + handler.request.name + " on " + this.name);
         }
 
         return this;
     }
+
+    /** @inheritDoc */
+    onUpdateProperty(handler: WoT.RequestHandler): ExposedThing {
+        // propertyName: string, cb: (newValue: any, oldValue?: any) => void
+        let state = this.interactionStates[handler.request.name]; // propertyName
+        if (state) {
+            state.handlers.push(handler.callback); // cb
+        } else {
+            console.error("no such property " + handler.request.name + " on " + this.name);
+        }
+
+        return this;
+    }
+
+    /** @inheritDoc */
+    onObserve(handler: WoT.RequestHandler): ExposedThing {
+        // TODO implement onObserve
+        return this;
+    }
+
 
     /**
      * Retrive the ExposedThing description for this object
@@ -173,61 +202,62 @@ export default class ExposedThing implements WoT.DynamicThing {
         )
     }
 
-    /**
-     * declare a new property for the ExposedThing
-     * @param propertyName Name of the property
-     * @param valueType type specification of the value (JSON schema)
-     */
-    addProperty(propertyName: string, valueType: Object, initialValue?: any): ExposedThing {
+    /** @inheritDoc */
+    addProperty(property: WoT.ThingPropertyInit): ExposedThing {
+        // propertyName: string, valueType: Object, initialValue?: any
+
         // new way
         let newProp = new TD.Interaction();
         newProp.pattern = TD.InteractionPattern.Property;
-        newProp.name = propertyName;
-      //  newProp.inputData = { 'valueType' : valueType};
-       // newProp.outputData =  { 'valueType' : valueType};
-        newProp.outputData =  valueType;
-        newProp.writable = true; //we need a param for this
+        newProp.name = property.name;
+        newProp.outputData = property.description; // need to be properly specified in FPWD
+        newProp.writable = property.writable;
 
         this.interactions.push(newProp);
 
         let propState = new InteractionState();
-        propState.value = initialValue;
+        propState.value = property.value; // initialValue;
         propState.handlers = [];
 
-        this.interactionStates[propertyName] = propState;
+        this.interactionStates[property.name] = propState;
 
-        this.addResourceListener("/" + this.name + "/properties/" + propertyName, new Rest.PropertyResourceListener(this, newProp));
+        this.addResourceListener("/" + this.name + "/properties/" + property.name, new Rest.PropertyResourceListener(this, newProp));
+
+        if(property.onWrite) {
+            console.info("set onWrite handler for " + property.name);
+            propState.handlers.push(property.onWrite);
+        }
 
         return this;
     }
 
-    /**
-     * declare a new action for the ExposedThing
-     * @param actionName Name of the action
-     * @param inputType type specification of the parameter (optional, JSON schema)
-     * @param outputType type specification of the return value (optional, JSON schema)
-     */
-    addAction(actionName: string, inputType?: Object, outputType?: Object): ExposedThing {
+    /** @inheritDoc */
+    addAction(action: WoT.ThingActionInit): ExposedThing {
+        // actionName: string, inputType?: Object, outputType?: Object
         // new way
         let newAction = new TD.Interaction();
         newAction.pattern = TD.InteractionPattern.Action;
-        newAction.name = actionName;
-        /*newAction.inputData = inputType ? { 'valueType' : inputType} : null;
-        newAction.outputData = outputType ? { 'valueType' : outputType} : null;
-*/
+        newAction.name = action.name;
+        // inputData & outputData
+        newAction.inputData = action.inputDataDescription ? action.inputDataDescription : null;
+        newAction.outputData = action.outputDataDescription ? action.outputDataDescription : null;
 
-        newAction.inputData = inputType ? inputType : null;
-        newAction.outputData = outputType ? outputType : null;
-
-     
         this.interactions.push(newAction);
 
         let actionState = new InteractionState();
+        // actionState.value = action.action;
         actionState.handlers = [];
 
-        this.interactionStates[actionName] = actionState;
+        console.log("Add action '" + action.name + "' to interactionStates");
 
-        this.addResourceListener("/" + this.name + "/actions/" + actionName, new Rest.ActionResourceListener(this, newAction));
+        this.interactionStates[action.name] = actionState;
+
+        this.addResourceListener("/" + this.name + "/actions/" + action.name, new Rest.ActionResourceListener(this, newAction));
+
+        if(action.action) {
+            console.info("set action handler for " + action.name);
+            actionState.handlers.push(action.action);
+        }
 
         return this;
     }
@@ -235,47 +265,46 @@ export default class ExposedThing implements WoT.DynamicThing {
     /**
      * declare a new eventsource for the ExposedThing
      */
-    addEvent(eventName: string): ExposedThing { 
-        
+    addEvent(event: WoT.ThingEventInit): ExposedThing { 
+        // eventName: string
         let newEvent = new TD.Interaction();
         newEvent.pattern = TD.InteractionPattern.Event;
-        newEvent.name = eventName;
+        newEvent.name = event.name; //  eventName;
 
         this.interactions.push(newEvent);
 
          let eventState = new InteractionState();
         eventState.handlers = [];
 
-        this.interactionStates[eventName] = eventState;
+        this.interactionStates[event.name] = eventState;
 
-        return this; }
+        return this;
+    }
 
-    /**
-     * remove a property from the ExposedThing
-     */
-    removeProperty(propertyName: string): boolean {
+    /** @inheritDoc */
+    removeProperty(propertyName: string): ExposedThing {
         delete this.interactionStates[propertyName];
         this.removeResourceListener(this.name + "/properties/" + propertyName)
-        return true;
+        return this;
     }
 
-    /**
-     * remove an action from the ExposedThing
-     */
-    removeAction(actionName: string): boolean {
+    /** @inheritDoc */
+    removeAction(actionName: string): ExposedThing {
         delete this.interactionStates[actionName];
         this.removeResourceListener(this.name + "/actions/" + actionName)
-        return true
+        return this;
     }
 
-    /**
-     * remove an event from the thing
-     */
-    removeEvent(eventName: string): boolean { return false }
+    /** @inheritDoc */
+    removeEvent(eventName: string): ExposedThing {
+        // TODO 
+        return this;
+    }
 }
 
 class InteractionState {
     public value: any;
-    public handlers: Array<(param?: any) => any> = [];
+    // public handlers: Array<(param?: any) => any> = [];
+    public handlers: Array<Function> = [];
     public path: string;
 }

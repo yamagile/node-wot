@@ -1,20 +1,20 @@
 /*
- * The MIT License (MIT)
+ * W3C Software License
+ *
  * Copyright (c) 2017 the thingweb community
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- * and associated documentation files (the "Software"), to deal in the Software without restriction,
- * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR
+ * WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF
+ * MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE
+ * SOFTWARE OR DOCUMENT WILL NOT INFRINGE ANY THIRD PARTY PATENTS, COPYRIGHTS,
+ * TRADEMARKS OR OTHER RIGHTS.
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial
- * portions of the Software.
+ * COPYRIGHT HOLDERS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL OR
+ * CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE OR DOCUMENT.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
- * TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * The name and trademarks of copyright holders may NOT be used in advertising or
+ * publicity pertaining to the work without specific, written prior permission. Title
+ * to copyright in this work will at all times remain with copyright holders.
  */
 
 /**
@@ -30,7 +30,61 @@ import { expect, should } from "chai";
 should();
 
 import Servient from "../src/servient";
-import {ProtocolClient,ProtocolClientFactory,Content} from "node-wot-protocols"
+import {ProtocolClient,ProtocolClientFactory,Content} from "../src/resource-listeners/protocol-interfaces"
+
+// import fs = require('fs');
+
+class TDDataClient implements ProtocolClient {
+
+        public readResource(uri : string) : Promise<Content> {
+            // Note: this is not a "real" DataClient! Instead it just reports the same TD in any case
+            let c : Content= { mediaType: "application/json", body :  new Buffer(JSON.stringify(myThingDesc)) };
+            return Promise.resolve(c);
+        }
+    
+        public writeResource(uri : string, content: Content) : Promise<void> {
+            return Promise.reject("writeResource not implemented");
+        }
+    
+        public invokeResource(uri : String, content: Content) : Promise<Content> {
+            return Promise.reject("invokeResource not implemented");
+        }
+    
+        public unlinkResource(uri : string) : Promise<void> {
+            return Promise.reject("unlinkResource not implemented");
+        }
+    
+        public start(): boolean {
+            return true;
+        }
+    
+        public stop(): boolean {
+            return true;
+        }
+
+        public setSecurity = (metadata : any) => false;
+    }
+
+class TDDataClientFactory implements ProtocolClientFactory {
+    client = new TDDataClient();
+
+    public getClient() : ProtocolClient {
+        return this.client;
+    }
+
+    public init() : boolean {
+        return true;
+    }
+
+    public destroy() : boolean {
+        return true;
+    }
+
+    public getSchemes() : Array<string> {
+        return ["data"];
+    }
+}
+
 
 class TrapClient implements ProtocolClient {
 
@@ -63,6 +117,8 @@ class TrapClient implements ProtocolClient {
     public stop(): boolean {
         return true;
     }
+    
+    public setSecurity = (metadata : any) => false;
 }
 
 class TrapClientFactory implements ProtocolClientFactory {
@@ -123,17 +179,35 @@ class WoTClientTest {
     static clientFactory: TrapClientFactory;
     static WoT: WoT.WoTFactory;
 
+    // static tdFileUri : string = "td.json";
+
     static before() {
         this.servient = new Servient()
         this.clientFactory = new TrapClientFactory();
         this.servient.addClientFactory(this.clientFactory);
+        this.servient.addClientFactory(new TDDataClientFactory());
         this.WoT = this.servient.start();
+
+        // // create local file to allow consuming TD based on URL
+        // fs.writeFile(this.tdFileUri, JSON.stringify(myThingDesc),  function(err) {
+        //     if (err) {
+        //         return console.error(err);
+        //     }
+        //     console.log("TD File created!");
+        // });
+
         console.log("starting test suite")
     }
 
     static after() {
         console.log("finishing test suite")
         this.servient.shutdown()
+
+        // // delete temporary file 
+        // fs.unlink(this.tdFileUri, (err) => {
+        //     if (err) throw err;
+        //     console.log('Successfully deleted TD file');
+        // });
     }
 
     @test "read a value"(done : Function) {
@@ -144,7 +218,8 @@ class WoTClientTest {
             }
         );
 
-        WoTClientTest.WoT.consumeDescription(myThingDesc)
+        // JSON.stringify(myThingDesc)
+        WoTClientTest.WoT.consume("data://" + "tdFoo")
             .then((thing) => {
                 expect(thing).not.to.be.null;
                 expect(thing.name).to.equal("aThing");
@@ -166,7 +241,8 @@ class WoTClientTest {
             }
         )
 
-        WoTClientTest.WoT.consumeDescription(myThingDesc)
+        // JSON.stringify(myThingDesc)
+        WoTClientTest.WoT.consume("data://" + "tdFoo")
             .then((thing) => {
                 expect(thing).not.to.be.null;
                 expect(thing.name).to.equal("aThing");
@@ -185,7 +261,8 @@ class WoTClientTest {
             }
         )
 
-        WoTClientTest.WoT.consumeDescription(myThingDesc)
+        // JSON.stringify(myThingDesc)
+        WoTClientTest.WoT.consume("data://" + "tdFoo")
             .then((thing) => {
                 thing.should.not.be.null;
                 thing.name.should.equal("aThing");

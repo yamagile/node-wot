@@ -1,47 +1,53 @@
 /*
- * The MIT License (MIT)
+ * W3C Software License
+ *
  * Copyright (c) 2017 the thingweb community
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- * and associated documentation files (the "Software"), to deal in the Software without restriction,
- * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR
+ * WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF
+ * MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE
+ * SOFTWARE OR DOCUMENT WILL NOT INFRINGE ANY THIRD PARTY PATENTS, COPYRIGHTS,
+ * TRADEMARKS OR OTHER RIGHTS.
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial
- * portions of the Software.
+ * COPYRIGHT HOLDERS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL OR
+ * CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE OR DOCUMENT.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
- * TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * The name and trademarks of copyright holders may NOT be used in advertising or
+ * publicity pertaining to the work without specific, written prior permission. Title
+ * to copyright in this work will at all times remain with copyright holders.
  */
 
-import logger from "node-wot-logger";
-import {ProtocolClient} from "node-wot-protocols"
+import * as WoT from 'wot-typescript-definitions';
+import {ProtocolClient} from "./resource-listeners/protocol-interfaces"
 import Servient from "./servient";
 import {ThingDescription} from "node-wot-td-tools"
 import * as TD from "node-wot-td-tools";
-import * as Helpers from "node-wot-helpers";
-import ContentSerdes from "node-wot-content-serdes"
+import * as Helpers from "./helpers";
+import ContentSerdes from "./content-serdes"
+import {Observable} from 'rxjs/Observable';
 
 interface ClientAndLink {
     client: ProtocolClient
     link: TD.InteractionLink
 }
 
+
 export default class ConsumedThing implements WoT.ConsumedThing {
 
     readonly name: string;
-    private readonly td: ThingDescription;
-    private readonly srv: Servient;
+    readonly url: USVString;
+    readonly description: WoT.ThingDescription;
+
+    protected readonly td: ThingDescription;
+    protected readonly srv: Servient;
     private clients: Map<string, ProtocolClient> = new Map();
 
     constructor(servient: Servient, td: ThingDescription) {
         this.srv = servient
         this.name = td.name;
         this.td = td;
-        logger.info(`ConsumedThing '${this.name}' created`);
+        this.description = JSON.stringify(td);
+        console.info(`ConsumedThing '${this.name}' created`);
     }
 
     // lazy singleton for ProtocolClient per scheme
@@ -54,18 +60,24 @@ export default class ConsumedThing implements WoT.ConsumedThing {
         let cacheIdx = schemes.findIndex(scheme => this.clients.has(scheme))
 
         if (cacheIdx !== -1) {
-            logger.debug(`ConsumedThing '${this.name}' chose cached client for '${schemes[cacheIdx]}'`);
+            // from cache
+            console.log(`ConsumedThing '${this.name}' chose cached client for '${schemes[cacheIdx]}'`);
             let client = this.clients.get(schemes[cacheIdx]);
             let link = links[cacheIdx];
             return { client: client, link: link };
         } else {
-            logger.silly(`ConsumedThing '${this.name}' has no client in cache (${cacheIdx})`);
+            // new client
+            console.log(`ConsumedThing '${this.name}' has no client in cache (${cacheIdx})`);
             let srvIdx = schemes.findIndex(scheme => this.srv.hasClientFor(scheme));
             if (srvIdx === -1) throw new Error(`ConsumedThing '${this.name}' missing ClientFactory for '${schemes}'`);
-            logger.silly(`ConsumedThing '${this.name}' chose protocol '${schemes[srvIdx]}'`);
             let client = this.srv.getClientFor(schemes[srvIdx]);
             if (client) {
-                logger.debug(`ConsumedThing '${this.name}' got new client for '${schemes[srvIdx]}'`);
+                console.log(`ConsumedThing '${this.name}' got new client for '${schemes[srvIdx]}'`);
+                if (this.td.security) {
+                    console.warn("ConsumedThing applying security metadata");
+                    console.dir(this.td.security);
+                    client.setSecurity(this.td.security);
+                }
                 this.clients.set(schemes[srvIdx], client);
                 let link = links[srvIdx];
                 return { client: client, link: link }
@@ -94,13 +106,14 @@ export default class ConsumedThing implements WoT.ConsumedThing {
                 if (!client) {
                     reject(new Error(`ConsumedThing '${this.name}' did not get suitable client for ${link.href}`));
                 } else {
-                    logger.info(`ConsumedThing '${this.name}' getting ${link.href}`);
+                    console.info(`ConsumedThing '${this.name}' reading ${link.href}`);
                     client.readResource(link.href).then( (content) => {
                         if (!content.mediaType) content.mediaType = link.mediaType;
-                        logger.verbose(`ConsumedThing decoding '${content.mediaType}' in readProperty`);
+                        //console.log(`ConsumedThing decoding '${content.mediaType}' in readProperty`);
                         let value = ContentSerdes.bytesToValue(content);
                         resolve(value);
-                    });
+                    })
+                    .catch(err => { console.log("Failed to read because " + err); });
                 }
             }
         });
@@ -121,7 +134,7 @@ export default class ConsumedThing implements WoT.ConsumedThing {
                 if (!client) {
                     reject(new Error(`ConsumedThing '${this.name}' did not get suitable client for ${link.href}`));
                 } else {
-                    logger.info(`ConsumedThing '${this.name}' setting ${link.href} to '${newValue}'`);
+                    console.info(`ConsumedThing '${this.name}' writing ${link.href} with '${newValue}'`);
                     let payload = ContentSerdes.valueToBytes(newValue,link.mediaType)
                     resolve(client.writeResource(link.href, payload));
                 }
@@ -143,7 +156,7 @@ export default class ConsumedThing implements WoT.ConsumedThing {
                 if (!client) {
                     reject(new Error(`ConsumedThing '${this.name}' did not get suitable client for ${link.href}`));
                 } else {
-                    logger.info(`ConsumedThing '${this.name}' invoking ${link.href} with '${parameter}'`);
+                    console.info(`ConsumedThing '${this.name}' invoking ${link.href} with '${parameter}'`);
                     // TODO #5 client expects Buffer; ConsumedThing would have the necessary TD valueType rule...
 
                     let mediaType = link.mediaType;
@@ -151,7 +164,7 @@ export default class ConsumedThing implements WoT.ConsumedThing {
 
                     client.invokeResource(link.href, input).then( (output) => {
                         if (!output.mediaType) output.mediaType = link.mediaType;
-                        logger.verbose(`ConsumedThing decoding '${output.mediaType}' in invokeAction`);
+                        //console.log(`ConsumedThing decoding '${output.mediaType}' in invokeAction`);
                         let value = ContentSerdes.bytesToValue(output);
                         resolve(value);
                     });
@@ -160,14 +173,19 @@ export default class ConsumedThing implements WoT.ConsumedThing {
         });
     }
 
-    addListener(eventName: string, listener: (event: Event) => void): ConsumedThing { return this }
-    removeListener(eventName: string, listener: (event: Event) => void): ConsumedThing { return this }
+    addListener(eventName: string, listener: WoT.ThingEventListener): ConsumedThing {    
+        return this
+    }
+    removeListener(eventName: string, listener: WoT.ThingEventListener): ConsumedThing { return this }
     removeAllListeners(eventName: string): ConsumedThing { return this }
 
-    /**
-     * Retrive the thing description for this object
-     */
-    getDescription(): Object {
-        return this.td;
-    }
+    observe(name: string, requestType: WoT.RequestType): Observable<any> { return null }
+
+
+    // /**
+    //  * Retrive the thing description for this object
+    //  */
+    // getDescription(): Object {
+    //     return this.td;
+    // }
 }

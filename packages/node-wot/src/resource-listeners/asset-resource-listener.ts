@@ -1,20 +1,20 @@
 /*
- * The MIT License (MIT)
+ * W3C Software License
+ *
  * Copyright (c) 2017 the thingweb community
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- * and associated documentation files (the "Software"), to deal in the Software without restriction,
- * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR
+ * WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF
+ * MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE
+ * SOFTWARE OR DOCUMENT WILL NOT INFRINGE ANY THIRD PARTY PATENTS, COPYRIGHTS,
+ * TRADEMARKS OR OTHER RIGHTS.
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial
- * portions of the Software.
+ * COPYRIGHT HOLDERS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL OR
+ * CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE OR DOCUMENT.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
- * TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * The name and trademarks of copyright holders may NOT be used in advertising or
+ * publicity pertaining to the work without specific, written prior permission. Title
+ * to copyright in this work will at all times remain with copyright holders.
  */
 
 /**
@@ -22,8 +22,7 @@
  */
 
 import BasicResourceListener from "./basic-resource-listener";
-import logger from "node-wot-logger";
-import {Content,ResourceListener} from "node-wot-protocols"
+import {Content,ResourceListener} from "./protocol-interfaces"
 
 export default class AssetResourceListener extends BasicResourceListener implements ResourceListener {
 
@@ -37,21 +36,21 @@ export default class AssetResourceListener extends BasicResourceListener impleme
     }
 
     public onRead() : Promise<Content> {
-        logger.debug(`Reading asset`);
+        console.log(`Reading asset`);
         return new Promise<Content>(
             (resolve,reject) => resolve({ mediaType: this.mediaType, body: new Buffer(this.asset) })
         );
     }
 
     public onWrite(content : Content) : Promise<void> {
-        logger.debug(`Writing '${content.body.toString()}' to asset`);
+        console.log(`Writing '${content.body.toString()}' to asset`);
         this.mediaType = content.mediaType;
         this.asset = content.body;
         return new Promise<void>((resolve,reject) => resolve())
     }
 
     public onInvoke(content : Content) : Promise<Content> {
-        logger.debug(`Invoking '${content.body.toString()}' on asset`);
+        console.log(`Invoking '${content.body.toString()}' on asset`);
         return new Promise<Content>(
             (resolve,reject) => resolve({ mediaType: this.mediaType, body: new Buffer("TODO") })
         );

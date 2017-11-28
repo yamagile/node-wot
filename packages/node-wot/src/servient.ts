@@ -1,31 +1,30 @@
 /*
- * The MIT License (MIT)
+ * W3C Software License
+ *
  * Copyright (c) 2017 the thingweb community
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- * and associated documentation files (the "Software"), to deal in the Software without restriction,
- * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR
+ * WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF
+ * MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE
+ * SOFTWARE OR DOCUMENT WILL NOT INFRINGE ANY THIRD PARTY PATENTS, COPYRIGHTS,
+ * TRADEMARKS OR OTHER RIGHTS.
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial
- * portions of the Software.
+ * COPYRIGHT HOLDERS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL OR
+ * CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE OR DOCUMENT.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
- * TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * The name and trademarks of copyright holders may NOT be used in advertising or
+ * publicity pertaining to the work without specific, written prior permission. Title
+ * to copyright in this work will at all times remain with copyright holders.
  */
 
-import logger from "node-wot-logger";
 
 import ExposedThing from "./exposed-thing";
 import WoTImpl from "./wot-impl";
-import {ProtocolClientFactory, ProtocolServer, ResourceListener, ProtocolClient} from "node-wot-protocols"
+import {ProtocolClientFactory, ProtocolServer, ResourceListener, ProtocolClient} from "./resource-listeners/protocol-interfaces"
 import {ThingDescription} from "node-wot-td-tools";
 import * as TD from "node-wot-td-tools";
-import * as Helpers from "node-wot-helpers";
-import { default as ContentSerdes, ContentCodec } from "node-wot-content-serdes"
+import * as Helpers from "./helpers";
+import { default as ContentSerdes, ContentCodec } from "./content-serdes"
 import * as vm from 'vm'
 
 export default class Servient {
@@ -36,29 +35,40 @@ export default class Servient {
 
     /** runs the script in a new sandbox */
     public runScript(code : string, filename = 'script') {
-        let script = new vm.Script(code)
-        let context = vm.createContext({ 'WoT' : new WoTImpl(this) , 'console' : console })
+        let script = new vm.Script(code);
+        let context = vm.createContext({
+            'WoT': new WoTImpl(this),
+            'console': console,
+            'setInterval': setInterval,
+            'setTimeout': setTimeout
+        });
         let options = {
             "filename" : filename,
             "displayErrors" : true
         };
-        script.runInContext(context,options)
+        script.runInContext(context,options);
     }
 
     /** runs the script in priviledged context (dangerous) - means here: scripts can require */
     public runPriviledgedScript(code : string, filename = 'script') {
-        let script = new vm.Script(code)
-        let context = vm.createContext({ 'WoT' : new WoTImpl(this) , 'console' : console, 'require' : require })
+        let script = new vm.Script(code);
+        let context = vm.createContext({
+            'WoT': new WoTImpl(this),
+            'console': console,
+            'setInterval': setInterval,
+            'setTimeout': setTimeout,
+            'require' : require
+        });
         let options = {
             "filename" : filename,
             "displayErrors" : true
         };
-        script.runInContext(context, options)
+        script.runInContext(context, options);
     }
 
     /** add a new codec to support a mediatype */
     public addMediaType(codec : ContentCodec) : void {
-        ContentSerdes.addCodec(codec)
+        ContentSerdes.addCodec(codec);
     }
 
     /** retun all media types that this servient supports */
@@ -73,15 +83,15 @@ export default class Servient {
     }
 
     public addResourceListener(path : string, resourceListener : ResourceListener) {
-        logger.verbose(`Servient adding ResourceListener '${path}' of type ${resourceListener.constructor.name}`);
+        console.log(`Servient adding ResourceListener '${path}' of type ${resourceListener.constructor.name}`);
         this.listeners.set(path,resourceListener);
-        this.servers.forEach(srv => srv.addResource(path,resourceListener))
+        this.servers.forEach(srv => srv.addResource(path,resourceListener));
     }
 
     public removeResourceListener(path : string) {
-        logger.verbose(`Servient removing ResourceListener '${path}'`);
+        console.log(`Servient removing ResourceListener '${path}'`);
         this.listeners.delete(path);
-        this.servers.forEach(srv => srv.removeResource(path))
+        this.servers.forEach(srv => srv.removeResource(path));
     }
 
     public addServer(server: ProtocolServer): boolean {
@@ -91,7 +101,7 @@ export default class Servient {
     }
 
     public getServers() : Array<ProtocolServer> {
-        return this.servers.slice(0)
+        return this.servers.slice(0);
     }
 
     public addClientFactory(clientFactory: ProtocolClientFactory): void {
@@ -99,13 +109,13 @@ export default class Servient {
     }
 
     public hasClientFor(scheme: string) : boolean {
-        logger.debug(`Servient checking for '${scheme}' scheme in ${this.clientFactories.size} ClientFactories`);
+        console.log(`Servient checking for '${scheme}' scheme in ${this.clientFactories.size} ClientFactories`);
         return this.clientFactories.has(scheme);
     }
 
     public getClientFor(scheme: string): ProtocolClient {
         if(this.clientFactories.has(scheme)) {
-            logger.verbose(`Servient creating client for scheme '${scheme}'`);
+            console.log(`Servient creating client for scheme '${scheme}'`);
             return this.clientFactories.get(scheme).getClient();
         } else {
             // FIXME returning null was bad - Error or Promise?
@@ -127,9 +137,10 @@ export default class Servient {
     public addThing(thing: ExposedThing): boolean {
         if (!this.things.has(thing.name)) {
             this.things.set(thing.name, thing);
-            return true
-        } else
-            return false
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public getThing(name: string): ExposedThing {
