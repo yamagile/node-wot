@@ -1,20 +1,20 @@
 /*
- * The MIT License (MIT)
+ * W3C Software License
+ *
  * Copyright (c) 2017 the thingweb community
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- * and associated documentation files (the "Software"), to deal in the Software without restriction,
- * including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR
+ * WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF
+ * MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE
+ * SOFTWARE OR DOCUMENT WILL NOT INFRINGE ANY THIRD PARTY PATENTS, COPYRIGHTS,
+ * TRADEMARKS OR OTHER RIGHTS.
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial
- * portions of the Software.
+ * COPYRIGHT HOLDERS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL OR
+ * CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE OR DOCUMENT.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
- * TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * The name and trademarks of copyright holders may NOT be used in advertising or
+ * publicity pertaining to the work without specific, written prior permission. Title
+ * to copyright in this work will at all times remain with copyright holders.
  */
 
 /**
@@ -31,7 +31,8 @@ should();
 
 import Servient from "../src/servient";
 import * as listeners from "../src/resource-listeners/all-resource-listeners";
-import {ProtocolServer,Content,ResourceListener} from "node-wot-protocols"
+import {ProtocolServer,Content,ResourceListener} from "../src/resource-listeners/protocol-interfaces"
+
 // implement a testserver to mock a server
 class TestProtocolServer implements ProtocolServer {
     private listeners: Map<string, ResourceListener> = new Map();
@@ -79,30 +80,110 @@ class WoTServerTest {
     }
 
     @test "should be able to add a thing"() {
-        return WoTServerTest.WoT.createThing("myThing").then(thing => {
+        return WoTServerTest.WoT.expose({
+            name : "myThing", 
+            url : "", 
+            description : undefined
+        }).then(thing => {
             expect(thing).to.exist;
             expect(thing).to.have.property("name", "myThing");
         });
     }
 
+    
+    @test "should be able to add a thing based on a given description"() {
+        let desc = `{
+            "@context": ["http://w3c.github.io/wot/w3c-wot-td-context.jsonld"],
+            "@type": ["Thing"],
+            "name": "myThingX",
+            "interaction": []
+        }`;
+
+        return WoTServerTest.WoT.expose({
+            name : "undefined", 
+            url : "", 
+            description : JSON.parse(desc)
+        }).then(thing => {
+            expect(thing).to.exist;
+            expect(thing).to.have.property("name", "myThingX");
+        });
+    }    
+
+
+    @test "should be able to add a thing based on a given description with property&action"() {
+        let desc = `{
+            "@context": ["http://w3c.github.io/wot/w3c-wot-td-context.jsonld"],
+            "@type": ["Thing"],
+            "name": "myThingY",
+            "interaction": [
+                {
+                    "@type": ["Property"],
+                    "name": "humidity",
+                    "outputData": { "type": "number" },
+                    "writable": false,
+                    "link": [{
+                      "href" : "/humid",
+                      "mediaType": "application/json"
+                      }]
+                }
+                ,
+                {
+                    "@type": ["Action"],
+                    "name": "toggle",
+                    "link": [{
+                        "href": "coaps://mylamp.example.com:5683/toggle",
+                        "mediaType": "application/json"
+                    }]
+                }
+            ]
+        }`;
+
+        return WoTServerTest.WoT.expose({
+            name : "undefined", 
+            url : "", 
+            description : JSON.parse(desc)
+        }).then(thing => {
+            expect(thing).to.exist;
+            expect(thing).to.have.property("name", "myThingY");
+        });
+    } 
+
     @test "should be able to add a property, read it and write it locally"() {
-        return WoTServerTest.WoT.createThing("otherthing").then(thing => {
-            return thing
-                .addProperty("number", { "type": "number" })
-                .setProperty("number", 5)
-                .then(value => {
-                    expect(value).to.equal(5);
-                })
-                .then(() => thing.getProperty("number"))
-                .then(value => {
-                    expect(value).to.equal(5);
-                });
+        return WoTServerTest.WoT.expose({
+            name : "otherthing", 
+            url : "", 
+            description : undefined
+        }).then(thing => {
+            let initp : WoT.ThingPropertyInit = {
+                name: "number", 
+                writable: true, 
+                description: JSON.stringify({ "type": "number" }),
+                value:  10
+            };
+            return thing.addProperty(initp).setProperty("number", 5).then(value => {
+                expect(value).to.equal(5);
+            })
+            .then(() => thing.getProperty("number"))
+            .then(value => {
+                expect(value).to.equal(5);
+            });
         });
     }
 
     @test "should be able to add a property, assign it via listener and read it locally"() {
-        return WoTServerTest.WoT.createThing("thing3").then(thing => {
-            thing.addProperty("prop1", { "type": "number" });
+        return WoTServerTest.WoT.expose({
+            name : "thing3", 
+            url : "", 
+            description : undefined
+        }).then(thing => {
+            let initp : WoT.ThingPropertyInit = {
+                name: "prop1",
+                writable: true,
+                description: JSON.stringify({ "type": "number" }),
+                value: 10
+            };
+            thing.addProperty(initp);
+
             let listener = WoTServerTest.server.getListenerFor("/thing3/properties/prop1");
             expect(listener).to.exist;
             listener.should.be.an.instanceOf(listeners.PropertyResourceListener);
@@ -113,11 +194,23 @@ class WoTServerTest {
     }
 
     @test "should be able to add a property, assign it locally and read it via listener"() {
-        return WoTServerTest.WoT.createThing("thing4").then(thing => {
-            thing.addProperty("prop1", { "type": "number" });
+        return WoTServerTest.WoT.expose({
+            name : "thing4",
+            url : "",
+            description : undefined
+        }).then(thing => {
+            let initp : WoT.ThingPropertyInit = {
+                name: "prop1", 
+                writable: true,
+                description: JSON.stringify({ "type": "number" }), 
+                value:  10
+            };
+            thing.addProperty(initp);
+
             let listener = WoTServerTest.server.getListenerFor("/thing4/properties/prop1");
             expect(listener).to.exist;
             listener.should.be.an.instanceOf(listeners.PropertyResourceListener);
+
             return thing.setProperty("prop1", 23).then((value) => {
                 return listener.onRead().then((content) => {
                     content.should.deep.equal({ mediaType: "application/json", body: new Buffer("23") });
@@ -127,8 +220,19 @@ class WoTServerTest {
     }
 
     @test "should be able to add a property, assign and read it via listener"() {
-        return WoTServerTest.WoT.createThing("thing5").then(thing => {
-            thing.addProperty("prop1", { "type": "number" });
+        return WoTServerTest.WoT.expose({
+            name : "thing5",
+            url : "",
+            description : undefined
+        }).then(thing => {
+            let initp : WoT.ThingPropertyInit = {
+                name: "prop1",
+                writable: true, 
+                description: JSON.stringify({ "type": "number" }), 
+                value: 10
+            };
+            thing.addProperty(initp);
+
             let listener = WoTServerTest.server.getListenerFor("/thing5/properties/prop1");
             expect(listener).to.exist;
             listener.should.be.an.instanceOf(listeners.PropertyResourceListener);
@@ -144,27 +248,64 @@ class WoTServerTest {
     }
 
     @test "should be able to add an action and invoke it locally"() {
-        return WoTServerTest.WoT.createThing("thing6").then(thing => {
-            thing
-            .addAction("action1", { "type": "number" }, { "type": "number" })
-            .onInvokeAction("action1", (param) => {
-                param.should.be.a("number");
-                param.should.equal(23);
+        return WoTServerTest.WoT.expose({
+            name : "thing6",
+            url : "",
+            description : undefined
+        }).then(thing => {
+            let inita : WoT.ThingActionInit = {name: "action1", inputDataDescription: JSON.stringify({ "type": "number" }), outputDataDescription: JSON.stringify({ "type": "number" }), semanticTypes: undefined, action: undefined};
+            thing.addAction(inita);
+
+            let request : WoT.Request = {type: undefined, from: null, name: "action1", options : null, data: null, respond : undefined, respondWithError: undefined}; // WoT.RequestType.action, 
+
+            thing.onInvokeAction({"request" : request, "callback" : request => {
+                request.should.be.a("number");
+                request.should.equal(23);
                 return 42;
-            })
+            }});
+
+            return thing.invokeAction("action1", 23).then((result) => result.should.equal(42));
+        })
+    }
+
+    @test "should be able to add an action and invoke it locally in ActionInit"() {
+        return WoTServerTest.WoT.expose({
+            name : "thing6b",
+            url : "",
+            description : undefined
+        }).then(thing => {
+            let inita : WoT.ThingActionInit = {
+                name: "action1", 
+                inputDataDescription: JSON.stringify({ "type": "number" }), 
+                outputDataDescription: JSON.stringify({ "type": "number" }), 
+                semanticTypes: undefined, 
+                action: (newValue: any, oldValue: any) => {
+                    newValue.should.be.a("number");
+                    newValue.should.equal(23);
+                    return 42;
+                }
+            };
+            thing.addAction(inita);
+            
             return thing.invokeAction("action1", 23).then((result) => result.should.equal(42));
         })
     }
 
     @test "should be able to add an action and invoke it via listener"() {
-        return WoTServerTest.WoT.createThing("thing7").then(thing => {
-            thing
-            .addAction("action1", { "type": "number" }, { "type": "number" })
-            .onInvokeAction("action1", (param) => {
-                param.should.be.a("number");
-                param.should.equal(23);
+        return WoTServerTest.WoT.expose({
+            name : "thing7",
+            url : "",
+            description : undefined
+        }).then(thing => {
+            let inita : WoT.ThingActionInit = {name: "action1", inputDataDescription: JSON.stringify({ "type": "number" }), outputDataDescription: JSON.stringify({ "type": "number" }), semanticTypes: undefined, action: undefined};
+            thing.addAction(inita);
+
+            let request : WoT.Request = {type: undefined, from: null, name: "action1", options : null, data: null, respond : undefined, respondWithError: undefined}; // WoT.RequestType.action, 
+            thing.onInvokeAction({"request" : request, "callback" : request => {
+                request.should.be.a("number");
+                request.should.equal(23);
                 return 42;
-            })
+            }});
             
             let listener = WoTServerTest.server.getListenerFor("/thing7/actions/action1");
             expect(listener).to.exist;
